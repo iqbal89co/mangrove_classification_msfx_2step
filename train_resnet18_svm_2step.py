@@ -154,7 +154,7 @@ def main():
     )
 
     print("[Stage 2] Training SVM on extracted features...")
-    svm.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+    svm.fit(X_train, y_train)
 
     # Validation metrics
     y_pred_val = svm.predict(X_val)
