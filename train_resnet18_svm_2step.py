@@ -170,7 +170,7 @@ def main():
     writer.add_figure("SVM/Val/ConfusionMatrix_Normalized", fig_cmvn, global_step); plt.close(fig_cmvn)
 
     # Test metrics
-    y_pred_test = xgb.predict(X_test)
+    y_pred_test = svm.predict(X_test)
     _, _, f1t, _, pmt, rmt, f1mt, cmt = compute_prf1_cm(y_test, y_pred_test, num_classes)
     acc_test = (y_pred_test == y_test).mean()
     print(f"[Test | SVM] acc {acc_test:.4f} | macro P/R/F1 {pmt:.4f}/{rmt:.4f}/{f1mt:.4f}")
