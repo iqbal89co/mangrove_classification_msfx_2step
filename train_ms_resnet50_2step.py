@@ -44,41 +44,61 @@ MS_LAYERS = ("layer1", "layer2", "layer3", "layer4")  # multi-scale fusion set
 
 # -------------- NEW: Multi-scale ResNet50 wrapper --------------
 class MultiScaleResNet50(nn.Module):
-    def __init__(self, num_classes: int, layers=("layer1","layer2","layer3","layer4"), head_hidden: int = 0):
+    """
+    ResNet50 backbone + multi-scale fusion (GAP on layer1..layer4, concat) + classification head.
+    'head' replaces the usual 'fc'.
+    """
+    def __init__(self, num_classes: int, layers=MS_LAYERS, head_hidden: int = 0):
         super().__init__()
         self.layers = set(layers)
 
         base = resnet50(weights=ResNet50_Weights.DEFAULT)
+        # reuse backbone blocks
         self.conv1 = base.conv1; self.bn1 = base.bn1; self.relu = base.relu; self.maxpool = base.maxpool
-        self.layer1 = base.layer1  # 256 ch
-        self.layer2 = base.layer2  # 512 ch
-        self.layer3 = base.layer3  # 1024 ch
-        self.layer4 = base.layer4  # 2048 ch
+        self.layer1 = base.layer1
+        self.layer2 = base.layer2
+        self.layer3 = base.layer3
+        self.layer4 = base.layer4
 
-        # Head: let it infer in_features automatically
+        # compute fused dim
+        dims = []
+        if "layer1" in self.layers: dims.append(64)
+        if "layer2" in self.layers: dims.append(128)
+        if "layer3" in self.layers: dims.append(256)
+        if "layer4" in self.layers: dims.append(512)
+        self.feat_dim = sum(dims)
+
+        # classifier head (simple linear by default)
         if head_hidden and head_hidden > 0:
             self.head = nn.Sequential(
-                nn.LazyLinear(head_hidden),
+                nn.Linear(self.feat_dim, head_hidden),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=0.2),
                 nn.Linear(head_hidden, num_classes),
             )
         else:
-            self.head = nn.LazyLinear(num_classes)
+            self.head = nn.Linear(self.feat_dim, num_classes)
 
     def forward_features(self, x):
         z = self.conv1(x); z = self.bn1(z); z = self.relu(z); z = self.maxpool(z)
-        f1 = self.layer1(z); f2 = self.layer2(f1); f3 = self.layer3(f2); f4 = self.layer4(f3)
+        f1 = self.layer1(z)        # 64, 56x56
+        f2 = self.layer2(f1)       # 128, 28x28
+        f3 = self.layer3(f2)       # 256, 14x14
+        f4 = self.layer4(f3)       # 512, 7x7
+
         gap = lambda t: t.mean(dim=(2,3))
         parts = []
         if "layer1" in self.layers: parts.append(gap(f1))
         if "layer2" in self.layers: parts.append(gap(f2))
         if "layer3" in self.layers: parts.append(gap(f3))
         if "layer4" in self.layers: parts.append(gap(f4))
-        return torch.cat(parts, dim=1)  # shape: (B, 3840) with all layers
+        fused = torch.cat(parts, dim=1)  # (B, feat_dim)
+        return fused
 
     def forward(self, x):
-        return self.head(self.forward_features(x))
+        fused = self.forward_features(x)
+        logits = self.head(fused)
+        return logits
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-scale ResNet50 two-stage trainer with explicit train/val/test")
@@ -95,7 +115,7 @@ def main():
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
     os.makedirs("models", exist_ok=True)
-    OUT_PATH = f"models/ms_resnet50_ds{args.dataset}.pth"
+    OUT_PATH = f"models/ms_resnet50_ds{args.dataset}_temp.pth"
 
     # TensorBoard
     run_name = f"ms_resnet50_ds{args.dataset}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
