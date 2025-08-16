@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from sklearn.svm import SVC
+import pickle
 
 DATASETS = {
     "1": {
@@ -55,7 +56,7 @@ def main():
     set_seed()
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     
-    OUT_SVM = f"models/resnet18_svm_ds{args.dataset}_best.model"
+    OUT_SVM = f"models/resnet18_svm_ds{args.dataset}_best.pkl"
     
     # TensorBoard
     run_name = f"resnet18_svm_ds{args.dataset}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
@@ -184,7 +185,9 @@ def main():
     writer.add_figure("SVM/Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
 
     # Save artifacts
-    svm.save_model(OUT_SVM)
+    with open(OUT_SVM,'wb') as f:
+        pickle.dump(svm,f)
+        
     print(f"  ✓ Saved SVM model to {OUT_SVM}")
     writer.close()
     print("Done.")
