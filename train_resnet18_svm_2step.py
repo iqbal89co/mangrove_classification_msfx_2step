@@ -1,19 +1,17 @@
 import argparse
-import random
 import os
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.utils.data.sampler import SubsetRandomSampler
 import torchvision.transforms as T
 from torchvision.models import resnet18, ResNet18_Weights
 
 from dataset import ImageDataset
-from utils import set_seed, train_one_epoch, evaluate, extract_features, extract_features_multiscale, compute_prf1_cm, plot_confusion_matrix
+from utils import set_seed, train_one_epoch, evaluate, extract_features, compute_prf1_cm, plot_confusion_matrix
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
-from xgboost import XGBClassifier
+from sklearn.svm import SVC
 
 DATASETS = {
     "1": {
@@ -57,14 +55,14 @@ def main():
     set_seed()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    OUT_XGB = f"models/ms_resnet18_xgb_ds{args.dataset}_best.model"
+    OUT_SVM = f"models/resnet18_svm_ds{args.dataset}_best.model"
     
     # TensorBoard
-    run_name = f"ms_resnet18_xgb_ds{args.dataset}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    run_name = f"resnet18_svm_ds{args.dataset}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     writer = SummaryWriter(log_dir=f"runs/{run_name}")
 
     mean = [0.485, 0.456, 0.406]; std = [0.229, 0.224, 0.225]
-    tf_train = T.Compose([T.RandomResizedCrop(224, scale=(0.5, 1.0)), T.RandomHorizontalFlip(), T.ToTensor(), T.Normalize(mean, std)])
+    tf_train = T.Compose([T.Resize((224,224)), T.RandomHorizontalFlip(), T.ToTensor(), T.Normalize(mean, std)])
     tf_eval  = T.Compose([T.Resize((224,224)), T.ToTensor(), T.Normalize(mean, std)])
 
     # Ensure consistent class->idx across splits (derive from TRAIN)
@@ -134,65 +132,60 @@ def main():
 
         global_step += 1
 
-    # ----- Stage 2: XGBoost on ResNet18 features -----
+    # ----- Stage 2: SVM on ResNet18 features -----
     # Use non-augmented images for feature extraction
     ds_train_noaug = ImageDataset(train_dir, transform=tf_eval, class_to_idx=class_to_idx)
     feat_train_loader = DataLoader(ds_train_noaug, batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
 
     # Extract features
-    X_train, y_train = extract_features_multiscale(model, feat_train_loader, device)
-    X_val,   y_val   = extract_features_multiscale(model, val_loader,        device)
-    X_test,  y_test  = extract_features_multiscale(model, test_loader,       device)
+    X_train, y_train = extract_features(model, feat_train_loader, device)
+    X_val,   y_val   = extract_features(model, val_loader,        device)
+    X_test,  y_test  = extract_features(model, test_loader,       device)
 
-    # XGBoost config (CPU by default; switch tree_method to 'gpu_hist' if you want GPU)
-    xgb = XGBClassifier(
-        objective="multi:softprob",
-        num_class=num_classes,
-        n_estimators=600,
-        max_depth=6,
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        reg_lambda=1.0,
-        reg_alpha=0.0,
-        tree_method="hist",   # change to "gpu_hist" if you have CUDA and want GPU training
-        random_state=SEED,
-        n_jobs=os.cpu_count(),
+    # SVM config (CPU by default; switch tree_method to 'gpu_hist' if you want GPU)
+    svm = SVC(
+        C=10.0,
+        kernel='rbf',
+        gamma='scale',
+        probability=True,
+        class_weight='balanced',
+        random_state=42,
+        cache_size=2000
     )
 
-    print("[Stage 2] Training XGBoost on extracted features...")
-    xgb.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+    print("[Stage 2] Training SVM on extracted features...")
+    svm.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
 
     # Validation metrics
-    y_pred_val = xgb.predict(X_val)
+    y_pred_val = svm.predict(X_val)
     _, _, f1v, _, pmv, rmv, f1mv, cmv = compute_prf1_cm(y_val, y_pred_val, num_classes)
     acc_val = (y_pred_val == y_val).mean()
-    writer.add_scalar("XGB/Val/Acc", acc_val, global_step)
-    writer.add_scalar("XGB/Val/Precision_macro", pmv, global_step)
-    writer.add_scalar("XGB/Val/Recall_macro",    rmv, global_step)
-    writer.add_scalar("XGB/Val/F1_macro",        f1mv, global_step)
+    writer.add_scalar("SVM/Val/Acc", acc_val, global_step)
+    writer.add_scalar("SVM/Val/Precision_macro", pmv, global_step)
+    writer.add_scalar("SVM/Val/Recall_macro",    rmv, global_step)
+    writer.add_scalar("SVM/Val/F1_macro",        f1mv, global_step)
     fig_cmv = plot_confusion_matrix(cmv, classes, normalize=False)
-    writer.add_figure("XGB/Val/ConfusionMatrix", fig_cmv, global_step); plt.close(fig_cmv)
+    writer.add_figure("SVM/Val/ConfusionMatrix", fig_cmv, global_step); plt.close(fig_cmv)
     fig_cmvn = plot_confusion_matrix(cmv, classes, normalize=True)
-    writer.add_figure("XGB/Val/ConfusionMatrix_Normalized", fig_cmvn, global_step); plt.close(fig_cmvn)
+    writer.add_figure("SVM/Val/ConfusionMatrix_Normalized", fig_cmvn, global_step); plt.close(fig_cmvn)
 
     # Test metrics
     y_pred_test = xgb.predict(X_test)
     _, _, f1t, _, pmt, rmt, f1mt, cmt = compute_prf1_cm(y_test, y_pred_test, num_classes)
     acc_test = (y_pred_test == y_test).mean()
-    print(f"[Test | XGB] acc {acc_test:.4f} | macro P/R/F1 {pmt:.4f}/{rmt:.4f}/{f1mt:.4f}")
-    writer.add_scalar("XGB/Test/Acc",  acc_test, global_step)
-    writer.add_scalar("XGB/Test/Precision_macro", pmt, global_step)
-    writer.add_scalar("XGB/Test/Recall_macro",    rmt, global_step)
-    writer.add_scalar("XGB/Test/F1_macro",        f1mt, global_step)
+    print(f"[Test | SVM] acc {acc_test:.4f} | macro P/R/F1 {pmt:.4f}/{rmt:.4f}/{f1mt:.4f}")
+    writer.add_scalar("SVM/Test/Acc",  acc_test, global_step)
+    writer.add_scalar("SVM/Test/Precision_macro", pmt, global_step)
+    writer.add_scalar("SVM/Test/Recall_macro",    rmt, global_step)
+    writer.add_scalar("SVM/Test/F1_macro",        f1mt, global_step)
     fig_cmt = plot_confusion_matrix(cmt, classes, normalize=False)
-    writer.add_figure("XGB/Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
+    writer.add_figure("SVM/Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
     fig_cmtn = plot_confusion_matrix(cmt, classes, normalize=True)
-    writer.add_figure("XGB/Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
+    writer.add_figure("SVM/Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
 
     # Save artifacts
-    xgb.save_model(OUT_XGB)
-    print(f"  ✓ Saved XGBoost model to {OUT_XGB}")
+    svm.save_model(OUT_SVM)
+    print(f"  ✓ Saved SVM model to {OUT_SVM}")
     writer.close()
     print("Done.")
 
