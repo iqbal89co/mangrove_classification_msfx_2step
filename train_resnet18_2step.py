@@ -51,7 +51,7 @@ def main():
         if not os.path.isdir(p): raise FileNotFoundError(f"Missing dir: {p}")
 
     set_seed()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
     mean = [0.485, 0.456, 0.406]; std = [0.229, 0.224, 0.225]
     tf_train = T.Compose([T.Resize((224,224)), T.RandomHorizontalFlip(), T.ToTensor(), T.Normalize(mean, std)])

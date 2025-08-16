@@ -53,7 +53,7 @@ def main():
         if not os.path.isdir(p): raise FileNotFoundError(f"Missing dir: {p}")
 
     set_seed()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     
     OUT_PATH = f"models/resnet50_ds{args.dataset}_temp.pth"
     
