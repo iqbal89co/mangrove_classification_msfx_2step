@@ -137,3 +137,42 @@ def extract_features_multiscale(model, loader, device, layers=("layer1","layer2"
     X = np.concatenate(feats, axis=0)
     y = np.concatenate(labels, axis=0)
     return X, y
+
+@torch.no_grad()
+def extract_features_multiscale_resnet50(model, loader, device, layers=("layer1","layer2","layer3","layer4")):
+    """
+    Extract multi-scale GAP features. Works with:
+      - Models exposing model.forward_features(x) -> (B, D)
+      - Vanilla torchvision ResNets via manual conv/layers path
+    Returns:
+      X: (N, D) float32
+      y: (N,)   int64
+    """
+    model.eval()
+    feats, labels = [], []
+
+    use_fast_path = hasattr(model, "forward_features") and callable(getattr(model, "forward_features"))
+
+    for x, y in loader:
+        x = x.to(device, non_blocking=True)
+
+        if use_fast_path:
+            f = model.forward_features(x)                 # (B, D)
+        else:
+            # Fallback path (vanilla resnet style)
+            z = model.conv1(x); z = model.bn1(z); z = model.relu(z); z = model.maxpool(z)
+            f1 = model.layer1(z); f2 = model.layer2(f1); f3 = model.layer3(f2); f4 = model.layer4(f3)
+            gap = lambda t: torch.mean(t, dim=(2,3))
+            parts = []
+            if "layer1" in layers: parts.append(gap(f1))
+            if "layer2" in layers: parts.append(gap(f2))
+            if "layer3" in layers: parts.append(gap(f3))
+            if "layer4" in layers: parts.append(gap(f4))
+            f = torch.cat(parts, dim=1)                   # (B, D)
+
+        feats.append(f.detach().cpu().numpy().astype(np.float32))
+        labels.append(y.numpy().astype(np.int64))
+
+    X = np.concatenate(feats, axis=0) if feats else np.empty((0, 0), dtype=np.float32)
+    y = np.concatenate(labels, axis=0) if labels else np.empty((0,), dtype=np.int64)
+    return X, y
