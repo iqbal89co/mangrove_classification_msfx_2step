@@ -60,15 +60,21 @@ class MultiScaleResNet50(nn.Module):
         self.layer3 = base.layer3
         self.layer4 = base.layer4
 
+        def _out_ch(seq):
+            last = seq[-1]
+            # Bottleneck has conv3, BasicBlock has conv2
+            return getattr(last, "conv3", getattr(last, "conv2")).out_channels
+
         # compute fused dim
         dims = []
-        if "layer1" in self.layers: dims.append(64)
-        if "layer2" in self.layers: dims.append(128)
-        if "layer3" in self.layers: dims.append(256)
-        if "layer4" in self.layers: dims.append(512)
+        if "layer1" in self.layers: dims.append(_out_ch(self.layer1))   # 256 on ResNet50, 64 on ResNet18
+        if "layer2" in self.layers: dims.append(_out_ch(self.layer2))   # 512 or 128
+        if "layer3" in self.layers: dims.append(_out_ch(self.layer3))   # 1024 or 256
+        if "layer4" in self.layers: dims.append(_out_ch(self.layer4))   # 2048 or 512
+
         self.feat_dim = sum(dims)
 
-        # classifier head (simple linear by default)
+        # classifier head (same as you had)
         if head_hidden and head_hidden > 0:
             self.head = nn.Sequential(
                 nn.Linear(self.feat_dim, head_hidden),
