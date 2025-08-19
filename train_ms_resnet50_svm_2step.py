@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from sklearn.svm import SVC
+import pickle
 
 DATASETS = {
     "1": {
@@ -122,7 +123,7 @@ def main():
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
     os.makedirs("models", exist_ok=True)
-    OUT_PATH = f"models/ms_resnet50_ds{args.dataset}_temp.pth"
+    OUT_SVM = f"models/ms_resnet50_ds{args.dataset}_temp.pkl"
 
     # TensorBoard
     run_name = f"ms_resnet50_ds{args.dataset}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
@@ -197,12 +198,6 @@ def main():
 
         if va_acc > best_val_acc:
             best_val_acc = va_acc
-            torch.save({"model_state": model.state_dict(),
-                        "classes": classes,
-                        "val_acc": best_val_acc,
-                        "feat_dim": model.feat_dim,
-                        "layers": list(MS_LAYERS)}, OUT_PATH)
-            print(f"  ✓ Saved best to {OUT_PATH} (val_acc={best_val_acc:.4f})")
 
         global_step += 1
 
@@ -250,16 +245,6 @@ def main():
 
     print(f"[SVM] val acc {va_acc:.4f} | macro P/R/F1 {pm:.4f}/{rm:.4f}/{f1m:.4f}")
 
-    # Save artifacts
-    torch.save(
-        {"backbone_state": model.state_dict(),
-         "classes": classes,
-         "feat_dim": getattr(model, "feat_dim", X_tr.shape[1]),
-         "layers": list(MS_LAYERS)},
-        "models/ms_resnet50_backbone.pth"
-    )
-    clf.save_model(f"models/svm_ms_resnet50_ds{args.dataset}.json")
-
     # ----- Final test evaluation -----
     y_pred_te = clf.predict(X_te)
     test_acc = (y_pred_te == y_te).mean()
@@ -274,6 +259,12 @@ def main():
     writer.add_figure("SVM/Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
     fig_cmtn = plot_confusion_matrix(cmt, classes, normalize=True)
     writer.add_figure("SVM/Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
+
+    # Save artifacts
+    with open(OUT_SVM,'wb') as f:
+        pickle.dump(clf,f)
+        
+    print(f"  ✓ Saved SVM model to {OUT_SVM}")
 
     writer.close()
     print("Done.")
