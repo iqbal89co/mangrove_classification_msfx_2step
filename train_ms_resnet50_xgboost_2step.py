@@ -239,7 +239,6 @@ def main():
     clf.fit(
         X_tr, y_tr,
         eval_set=[(X_tr, y_tr), (X_va, y_va)],
-        early_stopping_rounds=50,
         verbose=False
     )
 
