@@ -108,23 +108,23 @@ def main():
         p, r, f1, support, pm, rm, f1m, cm = compute_prf1_cm(y_true, y_pred, num_classes)
 
         # Logs
-        writer.add_scalar("Train/Loss", tr_loss, global_step)
-        writer.add_scalar("Train/Acc",  tr_acc,  global_step)
-        writer.add_scalar("Val/Loss",   va_loss, global_step)
-        writer.add_scalar("Val/Acc",    va_acc,  global_step)
-        writer.add_scalar("Val/Precision_macro", pm,  global_step)
-        writer.add_scalar("Val/Recall_macro",    rm,  global_step)
-        writer.add_scalar("Val/F1_macro",        f1m, global_step)
+        writer.add_scalar("Train/Fext/Loss", tr_loss, global_step)
+        writer.add_scalar("Train/Fext/Acc",  tr_acc,  global_step)
+        writer.add_scalar("Val/Fext/Loss",   va_loss, global_step)
+        writer.add_scalar("Val/Fext/Acc",    va_acc,  global_step)
+        writer.add_scalar("Val/Fext/Precision_macro", pm,  global_step)
+        writer.add_scalar("Val/Fext/Recall_macro",    rm,  global_step)
+        writer.add_scalar("Val/Fext/F1_macro",        f1m, global_step)
 
         # Per-class (kept light: only F1; uncomment if you want P/R too)
         for i, cls in enumerate(classes):
-            writer.add_scalar(f"Val/F1_per_class/{cls}", f1[i], global_step)
+            writer.add_scalar(f"Val/Fext/F1_per_class/{cls}", f1[i], global_step)
 
         # Confusion matrix (raw + normalized)
         fig_cm = plot_confusion_matrix(cm, classes, normalize=False)
-        writer.add_figure("Val/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
+        writer.add_figure("Val/Fext/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
         fig_cmn = plot_confusion_matrix(cm, classes, normalize=True)
-        writer.add_figure("Val/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
+        writer.add_figure("Val/Fext/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
 
         print(f"[Stage 1] Epoch {epoch:02d}/{EPOCHS_STAGE1} | "
               f"train {tr_loss:.4f}/{tr_acc:.4f} | val {va_loss:.4f}/{va_acc:.4f} | "
@@ -132,10 +132,6 @@ def main():
 
         if va_acc > best_val_acc:
             best_val_acc = va_acc
-            torch.save({"model_state": model.state_dict(),
-                        "classes": classes,
-                        "val_acc": best_val_acc}, OUT_PATH)
-            print(f"  ✓ Saved best to {OUT_PATH} (val_acc={best_val_acc:.4f})")
 
         global_step += 1
 
@@ -160,20 +156,20 @@ def main():
 
         p, r, f1, support, pm, rm, f1m, cm = compute_prf1_cm(y_true, y_pred, num_classes)
 
-        writer.add_scalar("Train/Loss", tr_loss, global_step)
-        writer.add_scalar("Train/Acc",  tr_acc,  global_step)
-        writer.add_scalar("Val/Loss",   va_loss, global_step)
-        writer.add_scalar("Val/Acc",    va_acc,  global_step)
-        writer.add_scalar("Val/Precision_macro", pm,  global_step)
-        writer.add_scalar("Val/Recall_macro",    rm,  global_step)
-        writer.add_scalar("Val/F1_macro",        f1m, global_step)
+        writer.add_scalar("Train/Clsf/Loss", tr_loss, global_step)
+        writer.add_scalar("Train/Clsf/Acc",  tr_acc,  global_step)
+        writer.add_scalar("Val/Clsf/Loss",   va_loss, global_step)
+        writer.add_scalar("Val/Clsf/Acc",    va_acc,  global_step)
+        writer.add_scalar("Val/Clsf/Precision_macro", pm,  global_step)
+        writer.add_scalar("Val/Clsf/Recall_macro",    rm,  global_step)
+        writer.add_scalar("Val/Clsf/F1_macro",        f1m, global_step)
         for i, cls in enumerate(classes):
-            writer.add_scalar(f"Val/F1_per_class/{cls}", f1[i], global_step)
+            writer.add_scalar(f"Val/Clsf/F1_per_class/{cls}", f1[i], global_step)
 
         fig_cm = plot_confusion_matrix(cm, classes, normalize=False)
-        writer.add_figure("Val/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
+        writer.add_figure("Val/Clsf/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
         fig_cmn = plot_confusion_matrix(cm, classes, normalize=True)
-        writer.add_figure("Val/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
+        writer.add_figure("Val/Clsf/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
 
         print(f"[Stage 2] Epoch {epoch:02d}/{EPOCHS_STAGE2} | "
               f"train {tr_loss:.4f}/{tr_acc:.4f} | val {va_loss:.4f}/{va_acc:.4f} | "
@@ -190,7 +186,7 @@ def main():
     
     training_time = time.time() - start_time
     print(f"Training time: {training_time:.2f} seconds")
-    writer.add_scalar("TrainingTime", training_time, global_step)
+    writer.add_scalar("Train/Time", training_time, global_step)
 
     # ----- Final test evaluation -----
     test_loss, test_acc, y_true_t, y_pred_t = evaluate(model, test_loader, criterion_s2, device, return_preds=True)
@@ -208,7 +204,7 @@ def main():
     writer.add_figure("Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
     test_time = time.time() - test_start_time
     print(f"Test time: {test_time:.2f} seconds")
-    writer.add_scalar("TestTime", test_time, global_step)
+    writer.add_scalar("Test/Time", test_time, global_step)
 
     writer.close()
     print("Done.")

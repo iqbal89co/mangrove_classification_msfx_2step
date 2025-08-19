@@ -47,7 +47,7 @@ LR_BACKBONE_S2 = 1e-4    # lower lr for backbone in stage 2
 WEIGHT_DECAY = 1e-4
 
 def main():
-    start_time = time.time()
+    train_start_time = time.time()
     parser = argparse.ArgumentParser(description="ResNet18 two-stage trainer with explicit train/val/test")
     parser.add_argument("dataset", choices=["1","2","3"], help="Choose dataset mapping")
     args = parser.parse_args()
@@ -110,23 +110,23 @@ def main():
         p, r, f1, support, pm, rm, f1m, cm = compute_prf1_cm(y_true, y_pred, num_classes)
 
         # Logs
-        writer.add_scalar("Train/Loss", tr_loss, global_step)
-        writer.add_scalar("Train/Acc",  tr_acc,  global_step)
-        writer.add_scalar("Val/Loss",   va_loss, global_step)
-        writer.add_scalar("Val/Acc",    va_acc,  global_step)
-        writer.add_scalar("Val/Precision_macro", pm,  global_step)
-        writer.add_scalar("Val/Recall_macro",    rm,  global_step)
-        writer.add_scalar("Val/F1_macro",        f1m, global_step)
+        writer.add_scalar("Train/Fext/Loss", tr_loss, global_step)
+        writer.add_scalar("Train/Fext/Acc",  tr_acc,  global_step)
+        writer.add_scalar("Val/Fext/Loss",   va_loss, global_step)
+        writer.add_scalar("Val/Fext/Acc",    va_acc,  global_step)
+        writer.add_scalar("Val/Fext/Precision_macro", pm,  global_step)
+        writer.add_scalar("Val/Fext/Recall_macro",    rm,  global_step)
+        writer.add_scalar("Val/Fext/F1_macro",        f1m, global_step)
 
         # Per-class (kept light: only F1; uncomment if you want P/R too)
         for i, cls in enumerate(classes):
-            writer.add_scalar(f"Val/F1_per_class/{cls}", f1[i], global_step)
+            writer.add_scalar(f"Val/Fext/F1_per_class/{cls}", f1[i], global_step)
 
         # Confusion matrix (raw + normalized)
         fig_cm = plot_confusion_matrix(cm, classes, normalize=False)
-        writer.add_figure("Val/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
+        writer.add_figure("Val/Fext/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
         fig_cmn = plot_confusion_matrix(cm, classes, normalize=True)
-        writer.add_figure("Val/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
+        writer.add_figure("Val/Fext/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
 
         print(f"[Stage 1] Epoch {epoch:02d}/{EPOCHS_STAGE1} | "
               f"train {tr_loss:.4f}/{tr_acc:.4f} | val {va_loss:.4f}/{va_acc:.4f} | "
@@ -161,22 +161,22 @@ def main():
     print("[Stage 2] Training SVM on extracted features...")
     svm.fit(X_train, y_train)
 
+    train_time = time.time() - train_start_time
+    print(f"Training time: {train_time:.2f} seconds")
+    writer.add_scalar("Train/Time", train_time, global_step)
+
     # Validation metrics
     y_pred_val = svm.predict(X_val)
     _, _, f1v, _, pmv, rmv, f1mv, cmv = compute_prf1_cm(y_val, y_pred_val, num_classes)
     acc_val = (y_pred_val == y_val).mean()
-    writer.add_scalar("SVM/Val/Acc", acc_val, global_step)
-    writer.add_scalar("SVM/Val/Precision_macro", pmv, global_step)
-    writer.add_scalar("SVM/Val/Recall_macro",    rmv, global_step)
-    writer.add_scalar("SVM/Val/F1_macro",        f1mv, global_step)
+    writer.add_scalar("Val/Clsf/Acc", acc_val, global_step)
+    writer.add_scalar("Val/Clsf/Precision_macro", pmv, global_step)
+    writer.add_scalar("Val/Clsf/Recall_macro",    rmv, global_step)
+    writer.add_scalar("Val/Clsf/F1_macro",        f1mv, global_step)
     fig_cmv = plot_confusion_matrix(cmv, classes, normalize=False)
-    writer.add_figure("SVM/Val/ConfusionMatrix", fig_cmv, global_step); plt.close(fig_cmv)
+    writer.add_figure("Val/Clsf/ConfusionMatrix", fig_cmv, global_step); plt.close(fig_cmv)
     fig_cmvn = plot_confusion_matrix(cmv, classes, normalize=True)
-    writer.add_figure("SVM/Val/ConfusionMatrix_Normalized", fig_cmvn, global_step); plt.close(fig_cmvn)
-
-    train_time = time.time() - train_start_time
-    print(f"Training time: {train_time:.2f} seconds")
-    writer.add_scalar("TrainTime", train_time, global_step)
+    writer.add_figure("Val/Clsf/ConfusionMatrix_Normalized", fig_cmvn, global_step); plt.close(fig_cmvn)
 
     # Test metrics
     test_start_time = time.time()
@@ -184,18 +184,18 @@ def main():
     _, _, f1t, _, pmt, rmt, f1mt, cmt = compute_prf1_cm(y_test, y_pred_test, num_classes)
     acc_test = (y_pred_test == y_test).mean()
     print(f"[Test | SVM] acc {acc_test:.4f} | macro P/R/F1 {pmt:.4f}/{rmt:.4f}/{f1mt:.4f}")
-    writer.add_scalar("SVM/Test/Acc",  acc_test, global_step)
-    writer.add_scalar("SVM/Test/Precision_macro", pmt, global_step)
-    writer.add_scalar("SVM/Test/Recall_macro",    rmt, global_step)
-    writer.add_scalar("SVM/Test/F1_macro",        f1mt, global_step)
+    writer.add_scalar("Test/Acc",  acc_test, global_step)
+    writer.add_scalar("Test/Precision_macro", pmt, global_step)
+    writer.add_scalar("Test/Recall_macro",    rmt, global_step)
+    writer.add_scalar("Test/F1_macro",        f1mt, global_step)
     fig_cmt = plot_confusion_matrix(cmt, classes, normalize=False)
-    writer.add_figure("SVM/Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
+    writer.add_figure("Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
     fig_cmtn = plot_confusion_matrix(cmt, classes, normalize=True)
-    writer.add_figure("SVM/Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
+    writer.add_figure("Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
 
     test_time = time.time() - test_start_time
     print(f"Test time: {test_time:.2f} seconds")
-    writer.add_scalar("TestTime", test_time, global_step)
+    writer.add_scalar("Test/Time", test_time, global_step)
 
     # Save artifacts
     with open(OUT_SVM, "wb") as f:

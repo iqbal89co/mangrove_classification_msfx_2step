@@ -15,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 import pickle
+import time
 
 DATASETS = {
     "1": {
@@ -109,7 +110,7 @@ class MultiScaleResNet50(nn.Module):
         return logits
 
 def main():
-    start_time = time.time()
+    train_start_time = time.time()
     parser = argparse.ArgumentParser(description="Multi-scale ResNet50 two-stage trainer with explicit train/val/test")
     parser.add_argument("dataset", choices=["1","2","3"], help="Choose dataset mapping")
     parser.add_argument("--head-hidden", type=int, default=0, help="MLP head hidden size (0 = linear)")
@@ -175,23 +176,23 @@ def main():
         p, r, f1, support, pm, rm, f1m, cm = compute_prf1_cm(y_true, y_pred, num_classes)
 
         # Logs
-        writer.add_scalar("Train/Loss", tr_loss, global_step)
-        writer.add_scalar("Train/Acc",  tr_acc,  global_step)
-        writer.add_scalar("Val/Loss",   va_loss, global_step)
-        writer.add_scalar("Val/Acc",    va_acc,  global_step)
-        writer.add_scalar("Val/Precision_macro", pm,  global_step)
-        writer.add_scalar("Val/Recall_macro",    rm,  global_step)
-        writer.add_scalar("Val/F1_macro",        f1m, global_step)
+        writer.add_scalar("Train/Fext/Loss", tr_loss, global_step)
+        writer.add_scalar("Train/Fext/Acc",  tr_acc,  global_step)
+        writer.add_scalar("Val/Fext/Loss",   va_loss, global_step)
+        writer.add_scalar("Val/Fext/Acc",    va_acc,  global_step)
+        writer.add_scalar("Val/Fext/Precision_macro", pm,  global_step)
+        writer.add_scalar("Val/Fext/Recall_macro",    rm,  global_step)
+        writer.add_scalar("Val/Fext/F1_macro",        f1m, global_step)
 
         # Per-class F1
         for i, cls in enumerate(classes):
-            writer.add_scalar(f"Val/F1_per_class/{cls}", f1[i], global_step)
+            writer.add_scalar(f"Val/Fext/F1_per_class/{cls}", f1[i], global_step)
 
         # Confusion matrix (raw + normalized)
         fig_cm = plot_confusion_matrix(cm, classes, normalize=False)
-        writer.add_figure("Val/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
+        writer.add_figure("Val/Fext/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
         fig_cmn = plot_confusion_matrix(cm, classes, normalize=True)
-        writer.add_figure("Val/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
+        writer.add_figure("Val/Fext/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
 
         print(f"[Stage 1] Epoch {epoch:02d}/{EPOCHS_STAGE1} | "
               f"train {tr_loss:.4f}/{tr_acc:.4f} | val {va_loss:.4f}/{va_acc:.4f} | "
@@ -229,26 +230,26 @@ def main():
 
     clf.fit(X_tr, y_tr)
 
+    train_time = time.time() - train_start_time
+    print(f"Training time: {train_time:.2f} seconds")
+    writer.add_scalar("TrainTime", train_time, global_step)
+
     # Validation metrics & logs
     y_pred_va = clf.predict(X_va)
     va_acc = (y_pred_va == y_va).mean()
     p, r, f1, support, pm, rm, f1m, cm = compute_prf1_cm(y_va, y_pred_va, num_classes)
 
-    writer.add_scalar("RF/Val/Acc", va_acc, global_step)
-    writer.add_scalar("RF/Val/Precision_macro", pm, global_step)
-    writer.add_scalar("RF/Val/Recall_macro",    rm, global_step)
-    writer.add_scalar("RF/Val/F1_macro",        f1m, global_step)
+    writer.add_scalar("Val/Clsf/Acc", va_acc, global_step)
+    writer.add_scalar("Val/Clsf/Precision_macro", pm, global_step)
+    writer.add_scalar("Val/Clsf/Recall_macro",    rm, global_step)
+    writer.add_scalar("Val/Clsf/F1_macro",        f1m, global_step)
     for i, cls in enumerate(classes):
-        writer.add_scalar(f"RF/Val/F1_per_class/{cls}", f1[i], global_step)
+        writer.add_scalar(f"Val/Clsf/F1_per_class/{cls}", f1[i], global_step)
 
     fig_cm = plot_confusion_matrix(cm, classes, normalize=False)
-    writer.add_figure("RF/Val/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
+    writer.add_figure("Val/Clsf/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
     fig_cmn = plot_confusion_matrix(cm, classes, normalize=True)
-    writer.add_figure("RF/Val/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
-
-    val_time = time.time() - val_start_time
-    print(f"Validation time: {val_time:.2f} seconds")
-    writer.add_scalar("ValTime", val_time, global_step)
+    writer.add_figure("Val/Clsf/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
 
     print(f"[RF] val acc {va_acc:.4f} | macro P/R/F1 {pm:.4f}/{rm:.4f}/{f1m:.4f}")
 
@@ -259,14 +260,14 @@ def main():
     pt, rt, f1t, _, pmt, rmt, f1mt, cmt = compute_prf1_cm(y_te, y_pred_te, num_classes)
     print(f"[Test RF] acc {test_acc:.4f} | macro P/R/F1 {pmt:.4f}/{rmt:.4f}/{f1mt:.4f}")
 
-    writer.add_scalar("RF/Test/Acc",  test_acc,  global_step)
-    writer.add_scalar("RF/Test/Precision_macro", pmt, global_step)
-    writer.add_scalar("RF/Test/Recall_macro",    rmt, global_step)
-    writer.add_scalar("RF/Test/F1_macro",        f1mt, global_step)
+    writer.add_scalar("Test/Acc",  test_acc,  global_step)
+    writer.add_scalar("Test/Precision_macro", pmt, global_step)
+    writer.add_scalar("Test/Recall_macro",    rmt, global_step)
+    writer.add_scalar("Test/F1_macro",        f1mt, global_step)
     fig_cmt = plot_confusion_matrix(cmt, classes, normalize=False)
-    writer.add_figure("RF/Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
+    writer.add_figure("Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
     fig_cmtn = plot_confusion_matrix(cmt, classes, normalize=True)
-    writer.add_figure("RF/Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
+    writer.add_figure("Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
 
     test_time = time.time() - test_start_time
     print(f"Test time: {test_time:.2f} seconds")

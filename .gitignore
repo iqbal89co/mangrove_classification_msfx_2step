@@ -8,3 +8,4 @@ models/
 .vscode/
 
 *.pth
+log_runner/
