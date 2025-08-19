@@ -229,11 +229,7 @@ def main():
         cache_size=2000
     )
 
-    clf.fit(
-        X_tr, y_tr,
-        eval_set=[(X_tr, y_tr), (X_va, y_va)],
-        verbose=False
-    )
+    clf.fit(X_tr, y_tr)
 
     # Validation metrics & logs
     y_pred_va = clf.predict(X_va)
