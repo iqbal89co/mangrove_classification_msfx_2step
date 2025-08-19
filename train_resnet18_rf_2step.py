@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 import pickle
+import time
 
 DATASETS = {
     "1": {
@@ -44,6 +45,7 @@ LR_BACKBONE_S2 = 1e-4    # lower lr for backbone in stage 2
 WEIGHT_DECAY = 1e-4
 
 def main():
+    start_time = time.time()
     parser = argparse.ArgumentParser(description="ResNet18 two-stage trainer with explicit train/val/test")
     parser.add_argument("dataset", choices=["1","2","3"], help="Choose dataset mapping")
     args = parser.parse_args()
@@ -171,8 +173,12 @@ def main():
     writer.add_figure("RF/Val/ConfusionMatrix", fig_cmv, global_step); plt.close(fig_cmv)
     fig_cmvn = plot_confusion_matrix(cmv, classes, normalize=True)
     writer.add_figure("RF/Val/ConfusionMatrix_Normalized", fig_cmvn, global_step); plt.close(fig_cmvn)
+    val_time = time.time() - val_start_time
+    print(f"Validation time: {val_time:.2f} seconds")
+    writer.add_scalar("RF/ValidationTime", val_time, global_step)
 
     # Test metrics
+    test_start_time = time.time()
     y_pred_test = rf.predict(X_test)
     _, _, f1t, _, pmt, rmt, f1mt, cmt = compute_prf1_cm(y_test, y_pred_test, num_classes)
     acc_test = (y_pred_test == y_test).mean()
@@ -185,6 +191,9 @@ def main():
     writer.add_figure("RF/Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
     fig_cmtn = plot_confusion_matrix(cmt, classes, normalize=True)
     writer.add_figure("RF/Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
+    test_time = time.time() - test_start_time
+    print(f"Test time: {test_time:.2f} seconds")
+    writer.add_scalar("RF/TestTime", test_time, global_step)
 
     # Save artifacts
     with open(OUT_RF,'wb') as f:

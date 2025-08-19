@@ -15,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from sklearn.svm import SVC
 import pickle
+import time
 
 DATASETS = {
     "1": {
@@ -109,6 +110,7 @@ class MultiScaleResNet50(nn.Module):
         return logits
 
 def main():
+    start_time = time.time()
     parser = argparse.ArgumentParser(description="Multi-scale ResNet50 two-stage trainer with explicit train/val/test")
     parser.add_argument("dataset", choices=["1","2","3"], help="Choose dataset mapping")
     parser.add_argument("--head-hidden", type=int, default=0, help="MLP head hidden size (0 = linear)")
@@ -242,10 +244,15 @@ def main():
     writer.add_figure("SVM/Val/ConfusionMatrix", fig_cm, global_step); plt.close(fig_cm)
     fig_cmn = plot_confusion_matrix(cm, classes, normalize=True)
     writer.add_figure("SVM/Val/ConfusionMatrix_Normalized", fig_cmn, global_step); plt.close(fig_cmn)
+    
+    train_time = time.time() - start_time
+    print(f"Training time: {train_time:.2f} seconds")
+    writer.add_scalar("TrainingTime", train_time, global_step)
 
     print(f"[SVM] val acc {va_acc:.4f} | macro P/R/F1 {pm:.4f}/{rm:.4f}/{f1m:.4f}")
 
     # ----- Final test evaluation -----
+    test_start_time = time.time()
     y_pred_te = clf.predict(X_te)
     test_acc = (y_pred_te == y_te).mean()
     pt, rt, f1t, _, pmt, rmt, f1mt, cmt = compute_prf1_cm(y_te, y_pred_te, num_classes)
@@ -259,6 +266,10 @@ def main():
     writer.add_figure("SVM/Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
     fig_cmtn = plot_confusion_matrix(cmt, classes, normalize=True)
     writer.add_figure("SVM/Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
+
+    test_time = time.time() - test_start_time
+    print(f"Test time: {test_time:.2f} seconds")
+    writer.add_scalar("TestTime", test_time, global_step)
 
     # Save artifacts
     with open(OUT_SVM,'wb') as f:

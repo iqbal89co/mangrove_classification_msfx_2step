@@ -107,6 +107,7 @@ class MultiScaleResNet50(nn.Module):
         return logits
 
 def main():
+    start_time = time.time()
     parser = argparse.ArgumentParser(description="Multi-scale ResNet50 two-stage trainer with explicit train/val/test")
     parser.add_argument("dataset", choices=["1","2","3"], help="Choose dataset mapping")
     parser.add_argument("--head-hidden", type=int, default=0, help="MLP head hidden size (0 = linear)")
@@ -256,8 +257,13 @@ def main():
             print(f"  ✓ Saved best to {OUT_PATH} (val_acc={best_val_acc:.4f})")
 
         global_step += 1
+    
+    train_time = time.time() - start_time
+    print(f"Training time: {train_time:.2f} seconds")
+    writer.add_scalar("TrainingTime", train_time, global_step)
 
     # ----- Final test evaluation -----
+    test_start_time = time.time()
     test_loss, test_acc, y_true_t, y_pred_t = evaluate(model, test_loader, criterion_s2, device, return_preds=True)
     pt, rt, f1t, _, pmt, rmt, f1mt, cmt = compute_prf1_cm(y_true_t, y_pred_t, num_classes)
     print(f"[Test] loss {test_loss:.4f} | acc {test_acc:.4f} | macro P/R/F1 {pmt:.4f}/{rmt:.4f}/{f1mt:.4f}")
@@ -271,6 +277,10 @@ def main():
     writer.add_figure("Test/ConfusionMatrix", fig_cmt, global_step); plt.close(fig_cmt)
     fig_cmtn = plot_confusion_matrix(cmt, classes, normalize=True)
     writer.add_figure("Test/ConfusionMatrix_Normalized", fig_cmtn, global_step); plt.close(fig_cmtn)
+
+    test_time = time.time() - test_start_time
+    print(f"Test time: {test_time:.2f} seconds")
+    writer.add_scalar("TestTime", test_time, global_step)
 
     writer.close()
     print("Done.")

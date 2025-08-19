@@ -10,6 +10,7 @@ from torchvision.models import resnet18, ResNet18_Weights
 
 from dataset import ImageDataset
 from utils import set_seed, train_one_epoch, evaluate, unfreeze_layer4_and_fc, freeze_all, unfreeze_fc, unfreeze_layer4_and_fc
+import time
 
 DATASETS = {
     "1": {
@@ -41,6 +42,7 @@ WEIGHT_DECAY = 1e-4
 OUT_PATH = "models/resnet18_best.pth"
 
 def main():
+    start_time = time.time()
     parser = argparse.ArgumentParser(description="ResNet18 two-stage trainer with explicit train/val/test")
     parser.add_argument("dataset", choices=["1","2","3"], help="Choose dataset mapping")
     args = parser.parse_args()
@@ -119,10 +121,17 @@ def main():
                         "classes": classes,
                         "val_acc": best_val_acc}, OUT_PATH)
             print(f"  ✓ Saved best to {OUT_PATH} (val_acc={best_val_acc:.4f})")
+    train_time = time.time() - start_time
+    print(f"Training time: {train_time:.2f} seconds")
+    writer.add_scalar("TrainingTime", train_time, global_step)
 
     # ----- Final test evaluation -----
+    test_start_time = time.time()
     test_loss, test_acc = evaluate(model, test_loader, criterion, device)
     print(f"[Test] loss {test_loss:.4f} | acc {test_acc:.4f}")
+    test_time = time.time() - test_start_time
+    print(f"Test time: {test_time:.2f} seconds")
+    writer.add_scalar("TestTime", test_time, global_step)
     print("Done.")
 
 if __name__ == "__main__":
