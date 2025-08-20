@@ -233,6 +233,7 @@ def main():
         objective="multi:softprob",
         num_class=num_classes,
         tree_method="gpu_hist" if use_gpu else "hist",
+        gpu_id=1,
         eval_metric="mlogloss",
         n_jobs=0,
         verbosity=1,

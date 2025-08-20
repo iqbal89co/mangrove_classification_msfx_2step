@@ -161,7 +161,7 @@ def main():
 
     print("[Stage 2] Training RF on extracted features...")
     rf.fit(X_train, y_train)
-    
+
     train_time = time.time() - train_start_time
     print(f"Training time: {train_time:.2f} seconds")
     writer.add_scalar("Train/Time", train_time, global_step)

@@ -147,19 +147,23 @@ def main():
     X_test,  y_test  = extract_features(model, test_loader,       device)
 
     # XGBoost config (CPU by default; switch tree_method to 'gpu_hist' if you want GPU)
+    use_gpu = torch.cuda.is_available()
     xgb = XGBClassifier(
-        objective="multi:softprob",
-        num_class=num_classes,
         n_estimators=600,
-        max_depth=6,
         learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
+        max_depth=6,
+        subsample=0.9,
+        colsample_bytree=0.9,
         reg_lambda=1.0,
         reg_alpha=0.0,
-        tree_method="hist",   # change to "gpu_hist" if you have CUDA and want GPU training
-        random_state=SEED,
-        n_jobs=os.cpu_count(),
+        min_child_weight=1.0,
+        objective="multi:softprob",
+        num_class=num_classes,
+        tree_method="gpu_hist" if use_gpu else "hist",
+        gpu_id=1,
+        eval_metric="mlogloss",
+        n_jobs=0,
+        verbosity=1,
     )
 
     print("[Stage 2] Training XGBoost on extracted features...")
