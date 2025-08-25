@@ -189,6 +189,7 @@ def main():
     writer.add_scalar("Train/Time", training_time, global_step)
 
     # ----- Final test evaluation -----
+    test_start_time = time.time()
     test_loss, test_acc, y_true_t, y_pred_t = evaluate(model, test_loader, criterion_s2, device, return_preds=True)
     pt, rt, f1t, _, pmt, rmt, f1mt, cmt = compute_prf1_cm(y_true_t, y_pred_t, num_classes)
     print(f"[Test] loss {test_loss:.4f} | acc {test_acc:.4f} | macro P/R/F1 {pmt:.4f}/{rmt:.4f}/{f1mt:.4f}")
